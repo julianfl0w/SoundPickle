@@ -6,7 +6,7 @@ from sf2utils.sf2parse import Sf2File
 import numpy as np
 from pedalboard import *
 import librosa
-
+import copy 
 here = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(here, ".."))
 sys.path.insert(0, os.path.join(here, "..", "..", "sinode"))
@@ -20,25 +20,62 @@ def spill(obj):
             val = eval("obj." + a)
             print("    " + a + ": " + str(val))
 
+def fromSf2(filename):
+    print("sf2 processing file " + filename)
+
+    retlist = []
+
+    with open(filename, "rb") as sf2_file:
+        sf2file = Sf2File(sf2_file)
+
+        for i in sf2file.instruments:
+            newObj = SoundPickle(sf2Inst = i, filename = filename)
+            del newObj.sf2Inst
+            retlist += [newObj]
+
+    print("done processing samples")
+    return retlist
+
+def fromSfz(filename):
+    return SoundPickle(filename = filename)
 
 class SoundPickle(sinode.Sinode):
     def __init__(self, **kwargs):
         sinode.Sinode.__init__(self, **kwargs)
         self.proc_kwargs(
             compressDB = 40,
-            compressRate = 40,
+            compressRate = 4,
             compress = False,
             normalize = True,
             trimDB = 40,
             SAMPLE_FREQUENCY = 48000,
+            percussion = False,
+            loop = True
         )
-        self.displayName = os.path.basename(self.filename)[:-4]
-        self.outFilename = self.filename + ".sp"
-
+        
         if self.filename.endswith(".sfz"):
+            self.displayName = os.path.basename(self.filename)[:-4]
+            self.outFilename = self.filename + ".sp"
             self.procSfz()
+
         elif self.filename.endswith(".sf2"):
-            self.procSf2()
+            self.source = "sf2"
+            self.displayName = self.sf2Inst.name
+            self.outFilename = self.filename + "." + self.sf2Inst.name + ".sp"
+
+            self.percussiveSampleIndex = 45
+            self.binaryBlob = np.zeros((0), dtype=np.float32)
+
+            self.regions = []
+            self.sample2region = {}
+            # spill(i)
+            if hasattr(self.sf2Inst, "bags"):
+                # print("bags")
+                for bag in self.sf2Inst.bags:
+                    # spill(bag)
+                    if hasattr(bag, "sample") and bag.sample is not None:
+                        self.processSample(bag.sample)
+                # die\
 
     def procSfz(self):
         self.source = "sfz"
@@ -254,55 +291,17 @@ class SoundPickle(sinode.Sinode):
             return noteNo == region.pitch_keycenter
         
         inRegion = True
-        if "lokey" in region.initDict.keys() and noteNo < sfz_note_to_midi_key(
+        if "lokey" in region.initDict.keys() and noteNo < SoundPickle.sfzparser.sfz_note_to_midi_key(
             region.lokey
         ):
             inRegion = False
-        if "hikey" in region.initDict.keys() and noteNo > sfz_note_to_midi_key(
+        if "hikey" in region.initDict.keys() and noteNo > SoundPickle.sfzparser.sfz_note_to_midi_key(
             region.hikey
         ):
             inRegion = False
         return inRegion
 
-    def procSf2(self):
-        self.source = "sf2"
-        self.percussiveSampleIndex = 45
-        board = Pedalboard(
-            [
-                Compressor(
-                    threshold_db=self.compressDB, ratio=self.compressRate
-                )
-            ]
-        )
-
-        self.binaryBlob = np.zeros((0), dtype=np.float32)
-        self.binFilename = self.filename + ".bin"
-
-        with open(self.filename, "rb") as sf2_file:
-            sf2file = Sf2File(sf2_file)
-            self.regions = []
-            self.sample2region = {}
-            # print(sf2file.raw.info)
-            # print(sf2file.raw.pdta)
-            # pp = pprint.PrettyPrinter(indent=4)
-            print("sf2 processing file " + self.filename)
-
-            # for a in dir(sf2file):
-            #    if not a.startswith("__") and a != "raw_sample_data":
-            #        val = eval("sf2file." + a)
-            #        print("    " + a + ": " + str(val))
-            for i in sf2file.instruments:
-                print(i.name)
-                if i.name == self.displayName:
-                    # spill(i)
-                    if hasattr(i, "bags"):
-                        # print("bags")
-                        for bag in i.bags:
-                            # spill(bag)
-                            if hasattr(bag, "sample") and bag.sample is not None:
-                                self.processSample(bag.sample)
-                # die\
-        print("done processing samples")
+  
 
         # pp.pprint(sf2file.presets)
         # for bag in sf2file.presets:
@@ -337,6 +336,13 @@ class SoundPickle(sinode.Sinode):
             np.float32
         ) / (2 ** 16)
 
+        board = Pedalboard(
+            [
+                Compressor(
+                    threshold_db=self.compressDB, ratio=self.compressRate
+                )
+            ]
+        )
         # normalize
         if self.normalize:
             newData = newData / max(newData)
@@ -385,9 +391,8 @@ class SoundPickle(sinode.Sinode):
                     }
                 )
 
-        thisregion = region.Region(regionDict)
+        thisregion = sp.region.Region(regionDict)
         # print(regionDict)
-        # region.sampleFilenameAndChannel = sample.name + "_0"
 
         self.binaryBlob = np.append(self.binaryBlob, newData, axis=0)
 

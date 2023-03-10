@@ -9,18 +9,29 @@ import SoundPickle as sp
 def convertFile(filename, overwrite=False):
     if filename.endswith(".sfz") or filename.endswith(".sf2"):
 
-        # dont overwrite if not requested
-        outfilename = filename + ".sp"
-        if (not overwrite) and os.path.exists(outfilename):
-            return 
         
         print("converting " + filename)
-        spObj = sp.sound_pickle.SoundPickle(filename = filename)
+        # sfz objects return a single instrument
+        if filename.endswith(".sfz"):
+            spObj = sp.sound_pickle.fromSfz(filename = filename)
         
-        print(spObj)
+            print(spObj)
+            
+            # dont overwrite if not requested
+            if (not overwrite) and os.path.exists(spObj.outFilename):
+                return 
+            
+            with open(spObj.outFilename, 'wb+') as f:
+                pickle.dump(spObj, f)
         
-        with open(outfilename, 'wb+') as f:
-            pickle.dump(spObj, f)
+        # sf2 objects will return a list
+        else:
+            spObj = sp.sound_pickle.fromSf2(filename = filename)
+        
+            for i in spObj: 
+                with open(i.outFilename, 'wb+') as f:
+                    pickle.dump(i, f)
+        
 
 def convertDirectory(dirname, overwrite=False):
     for f in os.listdir(dirname):
