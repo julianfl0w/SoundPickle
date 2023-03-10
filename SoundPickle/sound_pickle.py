@@ -1,20 +1,17 @@
 import os
+import sys
 import pickle
 from pedalboard import Pedalboard, Compressor
 from sf2utils.sf2parse import Sf2File
 import numpy as np
 from pedalboard import *
-import sys
-import os
 import librosa
 
 here = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
-import jero
-import pickle
-import jero.sampler.region as region
-import jero.sampler.patch as patch
-import jero.samples.sfzparser as sfzparser
+sys.path.insert(0, os.path.join(here, ".."))
+sys.path.insert(0, os.path.join(here, "..", "..", "sinode"))
+import sinode.sinode as sinode
+import SoundPickle as sp
 
 def spill(obj):
     print("spilling " + str(obj))
@@ -24,35 +21,34 @@ def spill(obj):
             print("    " + a + ": " + str(val))
 
 
-class SoundPickle:
-    def __init__(self, filename):
-        self.filename = filename
+class SoundPickle(sinode.Sinode):
+    def __init__(self, **kwargs):
+        sinode.Sinode.__init__(self, **kwargs)
+        self.proc_kwargs(
+            compressDB = 40,
+            compressRate = 40,
+            compress = False,
+            normalize = True,
+            trimDB = 40,
+            SAMPLE_FREQUENCY = 48000,
+        )
         self.displayName = os.path.basename(self.filename)[:-4]
         self.outFilename = self.filename + ".sp"
 
-        if filename.endswith(".sfz"):
+        if self.filename.endswith(".sfz"):
             self.procSfz()
-        elif filename.endswith(".sf2"):
+        elif self.filename.endswith(".sf2"):
             self.procSf2()
 
     def procSfz(self):
         self.source = "sfz"
         self.filenameBasedir = os.path.dirname(self.filename)
-
-        print(self.samplesLoadPoint)
-        self.binFilename = self.filename + ".bin"
-
-        if os.path.exists(self.binFilename):
-            with open(self.binFilename, "rb") as f:
-                self.regions, self.binaryBlob = pickle.load(f)
-            return
-
         self.binaryBlob = np.zeros((0), dtype=np.float32)
 
         board = Pedalboard(
             [
                 Compressor(
-                    threshold_db=self.compressDB, ratio=self.patch.compressRate
+                    threshold_db=self.compressDB, ratio=self.compressRate
                 )
             ]
         )
@@ -64,7 +60,7 @@ class SoundPickle:
         with open("a.spz", "w+") as f:
             f.write(preProcessText)
 
-        sfzParser = SFZParser("a.spz")
+        sfzParser = sp.sfzparser.sfzparser.SFZParser("a.spz")
         # pprint.pprint(sfzParser.sections)
 
         self.regions = []
@@ -125,7 +121,7 @@ class SoundPickle:
                     valueDict["lengthSamples"] = len(y)
                     valueDict["sample_rate"] = samplerate
 
-                    newRegion = region.Region(valueDict)
+                    newRegion = sp.region.Region(valueDict)
                     # newRegion.optimizeLoop(y)
 
                     newRegion.channelCount = channelCount
@@ -155,9 +151,6 @@ class SoundPickle:
                 for k, v in valueDict.items():
                     if k == "default_path" or k == "prefix_sfz_path":
                         v = v.replace("\\", os.sep)
-                        self.patch.samplesLoadPoint = os.path.join(
-                            self.filenameBasedir, v
-                        )
                         self.samplesLoadPoint = os.path.join(self.filenameBasedir, v)
                         print("Changing load point to " + str(self.samplesLoadPoint))
 
@@ -174,8 +167,6 @@ class SoundPickle:
         # save binary file for reloading
         if not len(self.regions):
             raise Exception("Empty regions list")
-        with open(self.binFilename, "wb+") as f:
-            pickle.dump((self.regions, self.binaryBlob), f)
 
     def preprocess(self, filename, replaceDict={}):
         print("processing file " + str(filename))
@@ -241,12 +232,12 @@ class SoundPickle:
 
             if "_hicc" in k:
                 ccNum = int(k.split("_hicc")[1])
-                if patch.control[ccNum] > int(v):
+                if self.control[ccNum] > int(v):
                     return False
 
             elif "_locc" in k:
                 ccNum = int(k.split("_locc")[1])
-                if patch.control[ccNum] < int(v):
+                if self.control[ccNum] < int(v):
                     return False
             # if k.startswith("xfin_hicc"):
             #    return False
@@ -276,33 +267,25 @@ class SoundPickle:
     def procSf2(self):
         self.source = "sf2"
         self.percussiveSampleIndex = 45
-        self.patch = patch
-        self.board = Pedalboard(
+        board = Pedalboard(
             [
                 Compressor(
-                    threshold_db=self.patch.compressDB, ratio=self.patch.compressRate
+                    threshold_db=self.compressDB, ratio=self.compressRate
                 )
             ]
         )
-        self.normalize = normalize
-        self.trimDB = trimDB
 
         self.binaryBlob = np.zeros((0), dtype=np.float32)
-        self.binFilename = patch.filename + ".bin"
+        self.binFilename = self.filename + ".bin"
 
-        if os.path.exists(self.binFilename) and cache:
-            with open(self.binFilename, "rb") as f:
-                self.regions, self.binaryBlob = pickle.load(f)
-            return
-
-        with open(patch.filename, "rb") as sf2_file:
+        with open(self.filename, "rb") as sf2_file:
             self.sf2 = Sf2File(sf2_file)
             self.regions = []
             self.sample2region = {}
             # print(self.sf2.raw.info)
             # print(self.sf2.raw.pdta)
             # pp = pprint.PrettyPrinter(indent=4)
-            print("sf2 processing file " + patch.filename)
+            print("sf2 processing file " + self.filename)
 
             # for a in dir(self.sf2):
             #    if not a.startswith("__") and a != "raw_sample_data":
@@ -310,7 +293,7 @@ class SoundPickle:
             #        print("    " + a + ": " + str(val))
             for i in self.sf2.instruments:
                 print(i.name)
-                if i.name == self.patch.displayName:
+                if i.name == self.displayName:
                     # spill(i)
                     if hasattr(i, "bags"):
                         # print("bags")
@@ -318,11 +301,7 @@ class SoundPickle:
                             # spill(bag)
                             if hasattr(bag, "sample") and bag.sample is not None:
                                 self.processSample(bag.sample)
-                # die
-        # save binary file for reloading
-        with open(self.binFilename, "wb+") as f:
-            pickle.dump((self.regions, self.binaryBlob), f)
-
+                # die\
         print("done processing samples")
 
         # pp.pprint(self.sf2.presets)
@@ -361,7 +340,7 @@ class SoundPickle:
         # normalize
         if self.normalize:
             newData = newData / max(newData)
-            newData = self.board(newData, sample.sample_rate)
+            newData = board(newData, sample.sample_rate)
             newData = newData / max(newData)
             newData, b = librosa.effects.trim(newData, top_db=self.trimDB)
 
@@ -379,13 +358,13 @@ class SoundPickle:
         else:
             regionDict["pitch_keycenter"] = int(sample.name)
 
-        if self.patch.percussion:
+        if self.percussion:
             regionDict["pitch_keycenter"] = self.percussiveSampleIndex
             self.percussiveSampleIndex += 1
 
         print(regionDict["pitch_keycenter"])
 
-        if hasattr(sample, "start_loop") and self.patch.loop:
+        if hasattr(sample, "start_loop") and self.loop:
             if sample.start_loop < sample.start:
                 regionDict.update(
                     {

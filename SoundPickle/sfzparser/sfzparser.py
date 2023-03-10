@@ -18,10 +18,10 @@ from pedalboard.io import AudioFile
 from pedalboard import *
 
 sys.path.insert(
-    0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+    0, os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 )
-import jero
-from .. import region
+
+import sound_pickle
 import copy
 
 SFZ_NOTE_LETTER_OFFSET = {"a": 9, "b": 11, "c": 0, "d": 2, "e": 4, "f": 5, "g": 7}
