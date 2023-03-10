@@ -279,19 +279,19 @@ class SoundPickle(sinode.Sinode):
         self.binFilename = self.filename + ".bin"
 
         with open(self.filename, "rb") as sf2_file:
-            self.sf2 = Sf2File(sf2_file)
+            sf2file = Sf2File(sf2_file)
             self.regions = []
             self.sample2region = {}
-            # print(self.sf2.raw.info)
-            # print(self.sf2.raw.pdta)
+            # print(sf2file.raw.info)
+            # print(sf2file.raw.pdta)
             # pp = pprint.PrettyPrinter(indent=4)
             print("sf2 processing file " + self.filename)
 
-            # for a in dir(self.sf2):
+            # for a in dir(sf2file):
             #    if not a.startswith("__") and a != "raw_sample_data":
-            #        val = eval("self.sf2." + a)
+            #        val = eval("sf2file." + a)
             #        print("    " + a + ": " + str(val))
-            for i in self.sf2.instruments:
+            for i in sf2file.instruments:
                 print(i.name)
                 if i.name == self.displayName:
                     # spill(i)
@@ -304,10 +304,10 @@ class SoundPickle(sinode.Sinode):
                 # die\
         print("done processing samples")
 
-        # pp.pprint(self.sf2.presets)
-        # for bag in self.sf2.presets:
+        # pp.pprint(sf2file.presets)
+        # for bag in sf2file.presets:
         #    pp.pprint(bag)
-        # for bag in self.sf2.instruments:
+        # for bag in sf2file.instruments:
         #    pp.pprint(bag)
         #    print(dir(s))
         #    print(s.DEFAULT_PITCH)

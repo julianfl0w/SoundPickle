@@ -11,7 +11,7 @@ def convertFile(filename, overwrite=False):
 
         # dont overwrite if not requested
         outfilename = filename + ".sp"
-        if overwrite and os.path.exists(outfilename):
+        if (not overwrite) and os.path.exists(outfilename):
             return 
         
         print("converting " + filename)
