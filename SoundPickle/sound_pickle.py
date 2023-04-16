@@ -12,6 +12,9 @@ sys.path.insert(0, os.path.join(here, ".."))
 sys.path.insert(0, os.path.join(here, "..", "..", "sinode"))
 import sinode.sinode as sinode
 import SoundPickle as sp
+import io
+from pydub import AudioSegment
+
 
 def spill(obj):
     print("spilling " + str(obj))
@@ -20,24 +23,25 @@ def spill(obj):
             val = eval("obj." + a)
             print("    " + a + ": " + str(val))
 
-def fromSf2(filename):
+def fromSf2(filename, **kwargs):
     print("sf2 processing file " + filename)
 
     retlist = []
 
     with open(filename, "rb") as sf2_file:
+        print(filename)
         sf2file = Sf2File(sf2_file)
 
         for i in sf2file.instruments:
-            newObj = SoundPickle(sf2Inst = i, filename = filename)
+            newObj = SoundPickle(sf2Inst = i, filename = filename, **kwargs)
             del newObj.sf2Inst
             retlist += [newObj]
 
     print("done processing samples")
     return retlist
 
-def fromSfz(filename):
-    return SoundPickle(filename = filename)
+def fromSfz(filename, **kwargs):
+    return SoundPickle(filename = filename, **kwargs)
 
 class SoundPickle(sinode.Sinode):
     def __init__(self, **kwargs):
@@ -48,20 +52,18 @@ class SoundPickle(sinode.Sinode):
             compress = False,
             normalize = True,
             trimDB = 40,
-            SAMPLE_FREQUENCY = 48000,
             percussion = False,
             loop = True
         )
         
         if self.filename.endswith(".sfz"):
             self.displayName = os.path.basename(self.filename)[:-4]
-            self.outFilename = self.filename + ".sp"
             self.procSfz()
 
         elif self.filename.endswith(".sf2"):
             self.source = "sf2"
             self.displayName = self.sf2Inst.name
-            self.outFilename = self.filename + "." + self.sf2Inst.name + ".sp"
+            self.name = self.sf2Inst.name
 
             self.percussiveSampleIndex = 45
             self.binaryBlob = np.zeros((0), dtype=np.float32)
@@ -76,10 +78,14 @@ class SoundPickle(sinode.Sinode):
                     if hasattr(bag, "sample") and bag.sample is not None:
                         self.processSample(bag.sample)
                 # die\
+        else:
+            raise Exception("Unimplemented filetype " + self.filename)
+
 
     def procSfz(self):
         self.source = "sfz"
         self.filenameBasedir = os.path.dirname(self.filename)
+        self.samplesLoadPoint = self.filenameBasedir
         self.binaryBlob = np.zeros((0), dtype=np.float32)
 
         board = Pedalboard(
@@ -93,9 +99,9 @@ class SoundPickle(sinode.Sinode):
 
         # self.samples2bin() # read the samples
         print("loading from " + str(self.filename))
-        preProcessText = self.preprocess(self.filename)
+        processedText = self.preprocessSfz(self.filename)
         with open("a.spz", "w+") as f:
-            f.write(preProcessText)
+            f.write(processedText)
 
         sfzParser = sp.sfzparser.sfzparser.SFZParser("a.spz")
         # pprint.pprint(sfzParser.sections)
@@ -135,24 +141,8 @@ class SoundPickle(sinode.Sinode):
                         continue
 
                     # Read in a whole audio file:
-                    y, samplerate = librosa.load(resolved, sr=self.SAMPLE_FREQUENCY)
-
-                    # normalize
-                    if self.normalize:
-                        y = y / max(y)
-                        if self.compress:
-                            y = board(y, self.SAMPLE_FREQUENCY)
-                        y = y / max(y)
-
-                    y, b = librosa.effects.trim(y, top_db=self.trimDB)
-
-                    # fade in the first 32 samples
-                    y[:32] *= np.arange(32) / 32
-
-                    if len(np.shape(y)) == 1:
-                        channelCount = 1
-                    else:
-                        channelCount = np.shape(y)[1]
+                    y, samplerate = librosa.load(resolved)
+                    y = self.audioProcess(y, samplerate)
 
                     valueDict["addressInPatch"] = startAddr
                     valueDict["lengthSamples"] = len(y)
@@ -160,6 +150,11 @@ class SoundPickle(sinode.Sinode):
 
                     newRegion = sp.region.Region(valueDict)
                     # newRegion.optimizeLoop(y)
+
+                    if len(np.shape(y)) == 1:
+                        channelCount = 1
+                    else:
+                        channelCount = np.shape(y)[1]
 
                     newRegion.channelCount = channelCount
                     for channel in range(channelCount):
@@ -205,7 +200,7 @@ class SoundPickle(sinode.Sinode):
         if not len(self.regions):
             raise Exception("Empty regions list")
 
-    def preprocess(self, filename, replaceDict={}):
+    def preprocessSfz(self, filename, replaceDict={}):
         print("processing file " + str(filename))
         # read in the template sfz
         with open(filename, "r") as f:
@@ -233,7 +228,7 @@ class SoundPickle(sinode.Sinode):
                     includeFilename = os.path.join(
                         self.filenameBasedir, includeFilename
                     )
-                    includeText = self.preprocess(
+                    includeText = self.preprocessSfz(
                         includeFilename, replaceDict=replaceDict.copy()
                     )
                     preProcessText += "\n" + includeText + "\n"
@@ -316,6 +311,27 @@ class SoundPickle(sinode.Sinode):
         #    print(s.CHANNEL_MONO)
         #    print(s.raw_sample_data)
 
+    def audioProcess(self, sampleData, sample_rate):
+        
+        board = Pedalboard(
+            [
+                Compressor(
+                    threshold_db=self.compressDB, ratio=self.compressRate
+                )
+            ]
+        )
+        # normalize
+        if self.normalize:
+            sampleData = sampleData / max(sampleData)
+            sampleData = board(sampleData, sample_rate)
+            sampleData = sampleData / max(sampleData)
+        sampleData, b = librosa.effects.trim(sampleData, top_db=self.trimDB)
+
+        # fade in the first 32 samples
+        sampleData[:32] *= np.arange(32) / 32
+
+        return sampleData
+    
     def processSample(self, sample):
 
         print("sf2 processing " + sample.name)
@@ -335,20 +351,7 @@ class SoundPickle(sinode.Sinode):
         newData = np.frombuffer(sample.raw_sample_data, dtype=np.int16).astype(
             np.float32
         ) / (2 ** 16)
-
-        board = Pedalboard(
-            [
-                Compressor(
-                    threshold_db=self.compressDB, ratio=self.compressRate
-                )
-            ]
-        )
-        # normalize
-        if self.normalize:
-            newData = newData / max(newData)
-            newData = board(newData, sample.sample_rate)
-            newData = newData / max(newData)
-            newData, b = librosa.effects.trim(newData, top_db=self.trimDB)
+        newData = self.audioProcess(newData, sample_rate = sample.sample_rate)
 
         # print(sample.sample_type)
         regionDict = {
@@ -401,3 +404,12 @@ class SoundPickle(sinode.Sinode):
 
         self.regions += [thisregion]
 
+def convertDirectory():
+    if len(sys.argv) != 2:
+    	raise Exception("Usage: soundpickle directory")
+    directory = sys.argv[1]
+    print("Converting directory " + directory )
+    sp.utils.convertDirectory(directory)
+
+if __name__ == "__main__":
+    convertDirectory()
