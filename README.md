@@ -7,6 +7,7 @@ You can easily convert SF2 and SFZ to SP.
 ]
 # Usage  
 ```bash
+# First you install directly from the production branch
 pip install git+https://github.com/julianfl0w/soundpickle
 # then you can use the CLI to convert a whole directory:  
 soundpickle .
