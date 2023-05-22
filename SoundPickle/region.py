@@ -3,7 +3,6 @@ import os
 
 here = os.path.dirname(os.path.abspath(__file__))
 sys.path = [os.path.join(here, "sfzparser")] + sys.path
-print(sys.path)
 from .sfzparser import sfzparser
 import math
 import numpy as np
