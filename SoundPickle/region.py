@@ -59,6 +59,42 @@ class Region:
             self.loopEnd = self.lengthSamples
             self.loopLength = 0
 
+    def contains(self, msg, control):
+        
+        # randUnity = random.random()
+        # if self.interface.DEBUG:
+        #    randUnity = 0.5
+        randUnity = 0.5
+        for k, v in self.initDict.items():
+            if k == "lovel" and msg.velocity < eval(self.initDict["lovel"]):
+                return False
+            if k == "hivel" and msg.velocity > eval(self.initDict["hivel"]):
+                return False
+            if k == "lorand" and randUnity < eval(self.initDict["lorand"]):
+                return False
+            if k == "hirand" and randUnity > eval(self.initDict["hirand"]):
+                return False
+
+            if "_hicc" in k:
+                ccNum = int(k.split("_hicc")[1])
+                if control[ccNum] > int(v):
+                    return False
+
+            elif "_locc" in k:
+                ccNum = int(k.split("_locc")[1])
+                if control[ccNum] < int(v):
+                    return False
+            # if k.startswith("xfin_hicc"):
+            #    return False
+            # if k.startswith("xfin_locc"):
+            #    return False
+            # if k.startswith("xfout_hicc"):
+            #    return False
+            # if k.startswith("xfout_locc"):
+            #    return False
+        return True
+
+
     def optimizeLoop(self, y):
         if self.loop:
 

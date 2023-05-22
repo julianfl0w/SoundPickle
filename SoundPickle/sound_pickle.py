@@ -14,7 +14,7 @@ import sinode.sinode as sinode
 import SoundPickle as sp
 import io
 from pydub import AudioSegment
-
+import sfzparser
 
 def spill(obj):
     print("spilling " + str(obj))
@@ -22,6 +22,11 @@ def spill(obj):
         if not a.startswith("__") and a != "raw_sample_data":
             val = eval("obj." + a)
             print("    " + a + ": " + str(val))
+
+def fromFile(filename):
+    with open(filename, 'rb') as f:
+        a = pickle.load(f)
+    return a 
 
 def fromSf2(filename, **kwargs):
     print("sf2 processing file " + filename)
@@ -245,52 +250,17 @@ class SoundPickle(sinode.Sinode):
 
         return preProcessText
 
-    def inRegion(self, msg, region, patch, dev=None):
-        if self.source == "sf2":
-            return True
-        # randUnity = random.random()
-        # if self.interface.DEBUG:
-        #    randUnity = 0.5
-        randUnity = 0.5
-        for k, v in region.initDict.items():
-            if k == "lovel" and msg.velocity < eval(region.initDict["lovel"]):
-                return False
-            if k == "hivel" and msg.velocity > eval(region.initDict["hivel"]):
-                return False
-            if k == "lorand" and randUnity < eval(region.initDict["lorand"]):
-                return False
-            if k == "hirand" and randUnity > eval(region.initDict["hirand"]):
-                return False
-
-            if "_hicc" in k:
-                ccNum = int(k.split("_hicc")[1])
-                if self.control[ccNum] > int(v):
-                    return False
-
-            elif "_locc" in k:
-                ccNum = int(k.split("_locc")[1])
-                if self.control[ccNum] < int(v):
-                    return False
-            # if k.startswith("xfin_hicc"):
-            #    return False
-            # if k.startswith("xfin_locc"):
-            #    return False
-            # if k.startswith("xfout_hicc"):
-            #    return False
-            # if k.startswith("xfout_locc"):
-            #    return False
-        return True
 
     def noteInSfzRegion(self, noteNo, region):
         if self.source == "sf2":
             return noteNo == region.pitch_keycenter
         
         inRegion = True
-        if "lokey" in region.initDict.keys() and noteNo < SoundPickle.sfzparser.sfz_note_to_midi_key(
+        if "lokey" in region.initDict.keys() and noteNo < sp.sfzparser.sfzparser.sfz_note_to_midi_key(
             region.lokey
         ):
             inRegion = False
-        if "hikey" in region.initDict.keys() and noteNo > SoundPickle.sfzparser.sfz_note_to_midi_key(
+        if "hikey" in region.initDict.keys() and noteNo > sp.sfzparser.sfzparser.sfz_note_to_midi_key(
             region.hikey
         ):
             inRegion = False

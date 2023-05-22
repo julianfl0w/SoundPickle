@@ -47,8 +47,7 @@ def convertFile(filename, overwrite=False):
                 print("couldnt process " + filename)
                 return
             print(spObj)
-            with open(outFilename, 'wb+') as f:
-                pickle.dump(spObj, f)
+            spObj.toFile(outFilename)
         
         # sf2 objects will return a list
         else:
@@ -68,8 +67,7 @@ def convertFile(filename, overwrite=False):
                 if (not overwrite) and os.path.exists(outFilename):
                     return 
                 
-                with open(outFilename, 'wb+') as f:
-                    pickle.dump(i, f)
+                spObj.toFile(outFilename)
         
 
 def convertDirectory(dirname, overwrite=False):
