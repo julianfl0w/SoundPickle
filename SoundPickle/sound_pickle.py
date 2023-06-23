@@ -12,9 +12,6 @@ sys.path.insert(0, os.path.join(here, ".."))
 sys.path.insert(0, os.path.join(here, "..", "..", "sinode"))
 import sinode.sinode as sinode
 import SoundPickle as sp
-import io
-from pydub import AudioSegment
-import sfzparser
 
 def spill(obj):
     print("spilling " + str(obj))
