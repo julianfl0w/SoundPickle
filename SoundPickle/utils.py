@@ -67,7 +67,7 @@ def convertFile(filename, overwrite=False):
                 if (not overwrite) and os.path.exists(outFilename):
                     return 
                 
-                spObj.toFile(outFilename)
+                i.toFile(outFilename)
         
 
 def convertDirectory(dirname, overwrite=False):
