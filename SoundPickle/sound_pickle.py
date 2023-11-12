@@ -12,6 +12,8 @@ sys.path.insert(0, os.path.join(here, ".."))
 sys.path.insert(0, os.path.join(here, "..", "..", "sinode"))
 import sinode.sinode as sinode
 import SoundPickle as sp
+import io
+from pydub import AudioSegment
 
 def spill(obj):
     print("spilling " + str(obj))
@@ -20,10 +22,21 @@ def spill(obj):
             val = eval("obj." + a)
             print("    " + a + ": " + str(val))
 
-def fromFile(filename):
+def fromPickle(filename):
     with open(filename, 'rb') as f:
+        print("loading " + filename)
         a = pickle.load(f)
+        a.soundPickleFilename = filename
     return a 
+
+def fromFile(filename, displayName=""):
+    if filename.endswith("sf2"):
+        for p in fromSf2(filename):
+            if displayName == p.displayName:
+                return p
+    if filename.endswith("sfz"):
+        return fromSfz(filename)
+
 
 def fromSf2(filename, **kwargs):
     print("sf2 processing file " + filename)
@@ -49,11 +62,7 @@ class SoundPickle(sinode.Sinode):
     def __init__(self, **kwargs):
         sinode.Sinode.__init__(self, **kwargs)
         self.proc_kwargs(
-            compressDB = 40,
-            compressRate = 4,
             compress = False,
-            normalize = True,
-            trimDB = 40,
             percussion = False,
             loop = True
         )
@@ -90,13 +99,6 @@ class SoundPickle(sinode.Sinode):
         self.samplesLoadPoint = self.filenameBasedir
         self.binaryBlob = np.zeros((0), dtype=np.float32)
 
-        board = Pedalboard(
-            [
-                Compressor(
-                    threshold_db=self.compressDB, ratio=self.compressRate
-                )
-            ]
-        )
         startAddr = 0
 
         # self.samples2bin() # read the samples
@@ -280,20 +282,6 @@ class SoundPickle(sinode.Sinode):
 
     def audioProcess(self, sampleData, sample_rate):
         
-        board = Pedalboard(
-            [
-                Compressor(
-                    threshold_db=self.compressDB, ratio=self.compressRate
-                )
-            ]
-        )
-        # normalize
-        if self.normalize:
-            sampleData = sampleData / max(sampleData)
-            sampleData = board(sampleData, sample_rate)
-            sampleData = sampleData / max(sampleData)
-        sampleData, b = librosa.effects.trim(sampleData, top_db=self.trimDB)
-
         # fade in the first 32 samples
         sampleData[:32] *= np.arange(32) / 32
 
@@ -376,7 +364,7 @@ def convertDirectory():
     	raise Exception("Usage: soundpickle directory")
     directory = sys.argv[1]
     print("Converting directory " + directory )
-    sp.utils.convertDirectory(directory)
+    sp.utils.convertUnknown(directory)
 
 if __name__ == "__main__":
     convertDirectory()

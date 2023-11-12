@@ -16,6 +16,7 @@ def note2freq(note):
 class Region:
     def __init__(self, initDict):
         self.initDict = initDict
+        self.trimOffset = 0
         # make the constants available locally
         for k, v in self.initDict.items():
             k = k.replace("#", "")

@@ -28,6 +28,15 @@ def getParams(filename):
         preprocParams = json.loads(f.read())
     return preprocParams
 
+
+def convertUnknown(dirname, overwrite=False):
+    if os.path.isfile(dirname):
+        convertFile(os.path.abspath(dirname), overwrite=overwrite)
+    else:
+        for f in os.listdir(dirname):
+            fullfilename = os.path.join(dirname, f)
+            convertUnknown(fullfilename, overwrite=overwrite)
+
 def convertFile(filename, overwrite=False):
     if filename.endswith(".sfz") or filename.endswith(".sf2"):
             
@@ -50,7 +59,7 @@ def convertFile(filename, overwrite=False):
             spObj.toFile(outFilename)
         
         # sf2 objects will return a list
-        else:
+        if filename.endswith(".sf2"):
             preprocParams = getParams(filename)
 
             try:
@@ -61,7 +70,11 @@ def convertFile(filename, overwrite=False):
             newdir = filename[:-4]
             os.makedirs(newdir, exist_ok=True)
             for i in spObj: 
+                if i.name == "EOI":
+                    continue
                 outFilename = os.path.join(newdir, i.name + ".sp")
+
+                #os.makedirs(os.path.basename(outFilename), exist_ok=True)
 
                 # dont overwrite if not requested
                 if (not overwrite) and os.path.exists(outFilename):
@@ -70,10 +83,85 @@ def convertFile(filename, overwrite=False):
                 i.toFile(outFilename)
         
 
-def convertDirectory(dirname, overwrite=False):
-    for f in os.listdir(dirname):
-        fullfilename = os.path.join(dirname, f)
-        if os.path.isfile(fullfilename):
-            convertFile(fullfilename, overwrite=overwrite)
-        else:
-            convertDirectory(fullfilename, overwrite=overwrite)
+def flattenDict(d):
+    retlist = []
+    if type(d) == dict:
+        for k, v in d.items():
+            retlist += flattenDict(v)
+    elif type(d) == list:
+        raise Exception("No lists allowed")
+    else:
+        retlist += [d]
+    return retlist
+
+
+def getPatchesFromSf2(filename):
+    retdict = {}
+    with open(filename, "rb") as sf2_file:
+        print("reading " + filename)
+        sf2 = Sf2File(sf2_file)
+        for inst in sf2.instruments:
+            if inst.name == "EOI":
+                continue
+
+            inst.name = inst.name.replace("/", "_")
+            print(inst.name)
+
+            instpkl = filename + "." + inst.name + ".pkl"
+            if os.path.exists(instpkl):
+                with open(instpkl, "rb") as f:
+                    retdict[inst.name] = pickle.load(f)
+
+            else:
+                retdict[inst.name] = SamplePatch(
+                    displayName=inst.name, filename=instpkl
+                )
+                with open(instpkl, "wb+") as f:
+                    pickle.dump(retdict[inst.name], f)
+                args = {
+                    "displayName": filename.replace(".sfz", ""),
+                    "filename": filename,
+                }
+
+                with open(pklpatch, "wb+") as f:
+                    pickle.dump(retdict[inst.name], f)
+
+    return retdict
+
+def getPatchFilenames(directory):
+
+    retlist = []
+    for file in os.listdir(directory):
+        fullfile = os.path.join(directory, file)
+
+        if os.path.isdir(fullfile):
+            retlist += getPatchFilenames(fullfile)
+
+        elif os.path.isfile(fullfile):
+            if fullfile.endswith(".sp"):
+                retdict += fullfile
+
+    return retdict
+
+
+def getPatchesFromDir(directory):
+
+    retdict = {}
+    for file in os.listdir(directory):
+        fullfile = os.path.join(directory, file)
+
+        if os.path.isdir(fullfile):
+            retdict[file] = getPatchesFromDir(fullfile)
+        elif os.path.isfile(fullfile):
+            if fullfile.endswith(".sp"):
+                #print(fullfile)
+                try:
+                    with open(fullfile, "rb") as f:
+                        newObj = pickle.load(f)
+                        newObj.soundPickleFilename = fullfile
+                        retdict[file] = newObj
+                except Exception as e: # work on python 3.x
+                    print('Failed to open: '+ str(e))
+                    print("couldn't open " + fullfile)
+
+    return retdict
