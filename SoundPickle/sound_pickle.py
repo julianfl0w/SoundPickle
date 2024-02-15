@@ -9,10 +9,10 @@ import librosa
 import copy 
 here = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(here, ".."))
-sinodeDir = os.path.join(here, "..", "..")
+sinodeDir = os.path.join(here, "..", "..", "sinode")
 sys.path.insert(0, sinodeDir)
 
-import sinode.sinode.sinode as sinode
+import sinode.sinode as sinode
 import SoundPickle as sp
 import io
 from pydub import AudioSegment
