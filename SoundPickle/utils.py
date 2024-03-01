@@ -37,14 +37,14 @@ def convertUnknown(dirname, overwrite=False):
             fullfilename = os.path.join(dirname, f)
             convertUnknown(fullfilename, overwrite=overwrite)
 
-def convertFile(filename, overwrite=False):
+def convertFile(filename, overwrite=False, stopOnFail = True):
     if filename.endswith(".sfz") or filename.endswith(".sf2"):
             
         print("converting " + filename)
         # sfz objects return a single instrument
         if filename.endswith(".sfz"):
 
-            outFilename = filename[:-4] + ".sp"
+            outFilename = filename[:-4] + ".json"
             # dont overwrite if not requested
             if (not overwrite) and os.path.exists(outFilename):
                 return 
@@ -52,35 +52,45 @@ def convertFile(filename, overwrite=False):
             preprocParams = getParams(filename)
             try:
                 spObj = sp.sound_pickle.fromSfz(filename = filename, **preprocParams)
-            except:
+            except Exception as e:
                 print("couldnt process " + filename)
-                return
-            print(spObj)
-            spObj.toFile(outFilename)
-        
+                raise(e)
+            
+            asDict = spObj.toJsonDict()
+            with open(outFilename, 'w+') as f:
+                #f.write(str(asDict))
+                f.write(json.dumps(asDict, indent=2))
+    
         # sf2 objects will return a list
         if filename.endswith(".sf2"):
             preprocParams = getParams(filename)
 
-            try:
-                spObj = sp.sound_pickle.fromSf2(filename = filename, **preprocParams)
-            except:
-                print("couldnt process " + filename)
-                return
+            if stopOnFail:
+                    spObj = sp.sound_pickle.fromSf2(filename = filename, **preprocParams)
+            else:
+                try:
+                    spObj = sp.sound_pickle.fromSf2(filename = filename, **preprocParams)
+                except:
+                    print("couldnt process " + filename)
+                    return
             newdir = filename[:-4]
             os.makedirs(newdir, exist_ok=True)
             for i in spObj: 
                 if i.name == "EOI":
                     continue
-                outFilename = os.path.join(newdir, i.name + ".sp")
+                outFilename = os.path.join(newdir, i.name + ".json")
 
                 #os.makedirs(os.path.basename(outFilename), exist_ok=True)
 
                 # dont overwrite if not requested
                 if (not overwrite) and os.path.exists(outFilename):
                     return 
-                
-                i.toFile(outFilename)
+                del i.apex
+
+                asDict = i.toJsonDict()
+                with open(outFilename, 'w+') as f:
+                    f.write(str(asDict))
+                    #f.write(json.dumps(asDict, indent=2))
         
 
 def flattenDict(d):

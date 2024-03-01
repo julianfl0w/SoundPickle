@@ -13,6 +13,7 @@ sys.path.insert(0, os.path.join(here, "..", "..", "sinode"))
 import sinode.sinode as sinode
 import SoundPickle as sp
 import io
+import base64
 from pydub import AudioSegment
 
 def spill(obj):
@@ -77,7 +78,6 @@ class SoundPickle(sinode.Sinode):
             self.name = self.sf2Inst.name
 
             self.percussiveSampleIndex = 45
-            self.binaryBlob = np.zeros((0), dtype=np.float32)
 
             self.regions = []
             self.sample2region = {}
@@ -97,9 +97,6 @@ class SoundPickle(sinode.Sinode):
         self.source = "sfz"
         self.filenameBasedir = os.path.dirname(self.filename)
         self.samplesLoadPoint = self.filenameBasedir
-        self.binaryBlob = np.zeros((0), dtype=np.float32)
-
-        startAddr = 0
 
         # self.samples2bin() # read the samples
         print("loading from " + str(self.filename))
@@ -145,28 +142,31 @@ class SoundPickle(sinode.Sinode):
                         continue
 
                     # Read in a whole audio file:
-                    y, samplerate = librosa.load(resolved)
-                    y = self.audioProcess(y, samplerate)
+                    y, samplerate = librosa.load(resolved, sr=None)  # sr=None to keep the original samplerate
+                    y = self.audioProcess(y, samplerate)  # Process the audio as needed
 
-                    valueDict["addressInPatch"] = startAddr
-                    valueDict["lengthSamples"] = len(y)
-                    valueDict["sample_rate"] = samplerate
+                    # Convert the NumPy array `y` back to an audio segment
+                    audio_segment = AudioSegment(
+                        y.tobytes(), 
+                        frame_rate=samplerate,
+                        sample_width=y.dtype.itemsize, 
+                        channels=1
+                    )
 
-                    newRegion = sp.region.Region(valueDict)
-                    # newRegion.optimizeLoop(y)
+                    # Instead of exporting to a file, export to an in-memory buffer
+                    buffer = io.BytesIO()
+                    audio_segment.export(buffer, format='mp3')
 
-                    if len(np.shape(y)) == 1:
-                        channelCount = 1
-                    else:
-                        channelCount = np.shape(y)[1]
+                    # Get the MP3 data from the buffer and encode it as base64
+                    mp3_data_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
 
-                    newRegion.channelCount = channelCount
-                    for channel in range(channelCount):
-                        self.binaryBlob = np.append(self.binaryBlob, y, axis=0)
-                        newRegion.sampleFilenameAndChannel = (
-                            resolved + "_" + str(channel)
-                        )
-                    startAddr += len(y)
+                    # Assuming `sp.region.Region` is a constructor for a region object in your application
+                    newRegion = sp.region.Region(
+                        lengthSamples=len(y),
+                        sample_rate=samplerate,
+                        mp3Data=mp3_data_base64  # Store the base64 encoded MP3 data
+                    )
+
                     sample2region[resolved] = newRegion
 
                 else:
@@ -205,7 +205,7 @@ class SoundPickle(sinode.Sinode):
             raise Exception("Empty regions list")
 
     def preprocessSfz(self, filename, replaceDict={}):
-        print("processing file " + str(filename))
+        print("sfz processing file " + str(filename))
         # read in the template sfz
         with open(filename, "r") as f:
             preprocFile = f.read()
@@ -303,18 +303,34 @@ class SoundPickle(sinode.Sinode):
                 print("    " + a + ": " + str(val))
 
         # read in the data
-        newData = np.frombuffer(sample.raw_sample_data, dtype=np.int16).astype(
+        y = np.frombuffer(sample.raw_sample_data, dtype=np.int16).astype(
             np.float32
         ) / (2 ** 16)
-        newData = self.audioProcess(newData, sample_rate = sample.sample_rate)
+        y = self.audioProcess(y, sample_rate = sample.sample_rate)
+
+        # Convert the NumPy array `y` back to an audio segment
+        audio_segment = AudioSegment(
+            y.tobytes(), 
+            frame_rate=sample.sample_rate,
+            sample_width=4, 
+            channels=1
+        )
+
+        # Instead of exporting to a file, export to an in-memory buffer
+        buffer = io.BytesIO()
+        audio_segment.export(buffer, format='mp3')
+
+        # Get the MP3 data from the buffer and encode it as base64
+        mp3_data_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+
 
         # print(sample.sample_type)
-        regionDict = {
-            "sample_rate": sample.sample_rate,
-            "sample": sample.name,
-            "addressInPatch": len(self.binaryBlob),
-            "lengthSamples": len(newData),
-        }
+        regionDict = dict(
+            sample_rate= sample.sample_rate,
+            sample= sample.name,
+            lengthSamples= len(y),
+            mp3_data_base64 = mp3_data_base64
+        )
 
         # if the sample has original_pitch attribute, use that
         if hasattr(sample, "original_pitch"):
@@ -349,22 +365,20 @@ class SoundPickle(sinode.Sinode):
                     }
                 )
 
-        thisregion = sp.region.Region(regionDict)
+        thisregion = sp.region.Region(**regionDict)
         # print(regionDict)
-
-        self.binaryBlob = np.append(self.binaryBlob, newData, axis=0)
 
         thisregion.samplesLoadPoint = ""
         self.sample2region[sample.name] = thisregion
 
         self.regions += [thisregion]
 
-def convertDirectory():
+def convertDirectory(force):
     if len(sys.argv) != 2:
     	raise Exception("Usage: soundpickle directory")
     directory = sys.argv[1]
     print("Converting directory " + directory )
-    sp.utils.convertUnknown(directory)
+    sp.utils.convertUnknown(directory, overwrite=force)
 
 if __name__ == "__main__":
-    convertDirectory()
+    convertDirectory(force = True)

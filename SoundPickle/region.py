@@ -6,25 +6,20 @@ sys.path = [os.path.join(here, "sfzparser")] + sys.path
 from .sfzparser import sfzparser
 import math
 import numpy as np
+import json
 
+sys.path.insert(0, os.path.join(here, "..", "..", "sinode"))
+import sinode.sinode as sinode
 
 def note2freq(note):
     a = 440.0  # frequency of A (common value is 440Hz)
     return (a / 32) * (2 ** ((note - 9) / 12.0))
 
 
-class Region:
-    def __init__(self, initDict):
-        self.initDict = initDict
+class Region(sinode.Sinode):
+    def __init__(self, **kwargs):
+        sinode.Sinode.__init__(self, **kwargs)
         self.trimOffset = 0
-        # make the constants available locally
-        for k, v in self.initDict.items():
-            k = k.replace("#", "")
-            if " " not in k:  # sometimes wierd stuff comes through
-                if type(v) != str:
-                    exec("self." + k + " = " + str(v))
-                else:
-                    exec("self." + k + ' = "' + v + '"')
 
         self.sampleMidiIndex = 57
         self.baseFrequency = 440
@@ -43,15 +38,14 @@ class Region:
 
         # print(self.initDict)
         if (
-            "loop_mode" in self.initDict.keys()
-            and self.initDict["loop_mode"] == "loop_continuous"
+            getattr(self, "loop_mode", None) == "loop_continuous"
         ):
             self.loop = True
-            self.loopStart = int(int(self.initDict["loop_start"]))
-            self.loopEnd = int(int(self.initDict["loop_end"]))
+            self.loopStart = int(int(self.loop_start))
+            self.loopEnd = int(int(self.loop_end))
 
-            self.loopLength = int(self.initDict["loop_end"]) - int(
-                self.initDict["loop_start"]
+            self.loopLength = int(self.loop_end) - int(
+                self.loop_start
             )
 
         else:
@@ -67,13 +61,13 @@ class Region:
         #    randUnity = 0.5
         randUnity = 0.5
         for k, v in self.initDict.items():
-            if k == "lovel" and msg.velocity < eval(self.initDict["lovel"]):
+            if k == "lovel" and msg.velocity < eval(self.lovel):
                 return False
-            if k == "hivel" and msg.velocity > eval(self.initDict["hivel"]):
+            if k == "hivel" and msg.velocity > eval(self.hivel):
                 return False
-            if k == "lorand" and randUnity < eval(self.initDict["lorand"]):
+            if k == "lorand" and randUnity < eval(self.lorand):
                 return False
-            if k == "hirand" and randUnity > eval(self.initDict["hirand"]):
+            if k == "hirand" and randUnity > eval(self.hirand):
                 return False
 
             if "_hicc" in k:
