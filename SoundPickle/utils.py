@@ -89,8 +89,8 @@ def convertFile(filename, overwrite=False, stopOnFail = True):
 
                 asDict = i.toJsonDict()
                 with open(outFilename, 'w+') as f:
-                    f.write(str(asDict))
-                    #f.write(json.dumps(asDict, indent=2))
+                    #f.write(str(asDict))
+                    f.write(json.dumps(asDict, indent=2))
         
 
 def flattenDict(d):

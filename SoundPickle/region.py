@@ -60,25 +60,32 @@ class Region(sinode.Sinode):
         # if self.interface.DEBUG:
         #    randUnity = 0.5
         randUnity = 0.5
-        for k, v in self.initDict.items():
-            if k == "lovel" and msg.velocity < eval(self.lovel):
-                return False
-            if k == "hivel" and msg.velocity > eval(self.hivel):
-                return False
-            if k == "lorand" and randUnity < eval(self.lorand):
-                return False
-            if k == "hirand" and randUnity > eval(self.hirand):
-                return False
+        randUnity = 0.5
 
-            if "_hicc" in k:
-                ccNum = int(k.split("_hicc")[1])
-                if control[ccNum] > int(v):
+        # Check for control change attributes with "_hicc" and "_locc" suffixes
+        for attr_name in dir(self):
+
+            if attr_name == "lovel" and msg.velocity < eval(attr_value):
+                return False
+            if attr_name == "hivel" and msg.velocity > eval(attr_value):
+                return False
+            if attr_name == "lorand" and randUnity < eval(attr_value):
+                return False
+            if attr_name == "hirand" and randUnity > eval(attr_value):
+                return False
+            
+            if "_hicc" in attr_name:
+                ccNum = int(attr_name.split("_hicc")[1])
+                attr_value = getattr(self, attr_name)
+                if control[ccNum] > int(attr_value):
                     return False
 
-            elif "_locc" in k:
-                ccNum = int(k.split("_locc")[1])
-                if control[ccNum] < int(v):
+            elif "_locc" in attr_name:
+                ccNum = int(attr_name.split("_locc")[1])
+                attr_value = getattr(self, attr_name)
+                if control[ccNum] < int(attr_value):
                     return False
+
             # if k.startswith("xfin_hicc"):
             #    return False
             # if k.startswith("xfin_locc"):
