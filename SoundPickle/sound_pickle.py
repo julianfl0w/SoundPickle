@@ -9,7 +9,9 @@ import librosa
 import copy 
 here = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(here, ".."))
-sys.path.insert(0, os.path.join(here, "..", "..", "sinode"))
+sinodeDir = os.path.join(here, "..", "..", "sinode")
+sys.path.insert(0, sinodeDir)
+
 import sinode.sinode as sinode
 import SoundPickle as sp
 import io
