@@ -18,6 +18,7 @@ import SoundPickle as sp
 import io
 import base64
 from pydub import AudioSegment
+import json 
 
 
 def spill(obj):
@@ -27,22 +28,24 @@ def spill(obj):
             val = eval("obj." + a)
             print("    " + a + ": " + str(val))
 
-
-def fromPickle(filename):
-    with open(filename, "rb") as f:
-        print("loading " + filename)
-        a = pickle.load(f)
-        a.soundPickleFilename = filename
-    return a
-
-
 def fromFile(filename, displayName=""):
     if filename.endswith("sf2"):
         for p in fromSf2(filename):
             if displayName == p.displayName:
                 return p
-    if filename.endswith("sfz"):
+    elif filename.endswith("sfz"):
         return fromSfz(filename)
+    elif filename.endswith("pkl"):
+        with open(filename, "rb") as f:
+            print("loading " + filename)
+            a = pickle.load(f)
+            a.soundPickleFilename = filename
+        return a
+    elif filename.endswith("json"):
+        with open(filename, "r") as f:
+            return sinode.objFromDict(name = filename, indict = json.loads(f.read()))
+    else:
+        raise Exception("Accepted filetypes: sf2, sfz, pkl, json")
 
 
 def fromSf2(filename, **kwargs):
@@ -172,7 +175,6 @@ class SoundPickle(sinode.Sinode):
                         sample_rate=samplerate,
                         mp3Data=mp3_data_base64,  # Store the base64 encoded MP3 data
                     )
-                    # Assuming `sp.region.Region` is a constructor for a region object in your application
                     newRegion = sp.region.Region(**sectionDict)
 
                     sample2region[resolved] = newRegion
@@ -256,36 +258,6 @@ class SoundPickle(sinode.Sinode):
             preProcessText += "\n"
 
         return preProcessText
-
-    def noteInSfzRegion(self, noteNo, region):
-        if self.source == "sf2":
-            return noteNo == region.pitch_keycenter
-
-        inRegion = True
-        if (
-            "lokey" in region.initDict.keys()
-            and noteNo < sp.sfzparser.sfzparser.sfz_note_to_midi_key(region.lokey)
-        ):
-            inRegion = False
-        if (
-            "hikey" in region.initDict.keys()
-            and noteNo > sp.sfzparser.sfzparser.sfz_note_to_midi_key(region.hikey)
-        ):
-            inRegion = False
-        return inRegion
-
-        # pp.pprint(sf2file.presets)
-        # for bag in sf2file.presets:
-        #    pp.pprint(bag)
-        # for bag in sf2file.instruments:
-        #    pp.pprint(bag)
-        #    print(dir(s))
-        #    print(s.DEFAULT_PITCH)
-        #    print(s.start)
-        #    print(s.end)
-        #    print(s.sample_width)
-        #    print(s.CHANNEL_MONO)
-        #    print(s.raw_sample_data)
 
     def audioProcess(self, sampleData, sample_rate):
 
@@ -383,7 +355,6 @@ def convertDirectory(force):
     directory = sys.argv[1]
     print("Converting directory " + directory)
     sp.utils.convertUnknown(directory, overwrite=force)
-
 
 if __name__ == "__main__":
     convertDirectory(force=True)
