@@ -4,6 +4,7 @@ import pickle
 from pedalboard import Pedalboard, Compressor
 from sf2utils.sf2parse import Sf2File
 import numpy as np
+import soundfile as sf
 from pedalboard import *
 import librosa
 import copy
@@ -68,6 +69,31 @@ def fromSf2(filename, **kwargs):
 
 def fromSfz(filename, **kwargs):
     return SoundPickle(filename=filename, **kwargs)
+
+def buffer2mp3b64(y, samplerate):
+    # normalize
+    y = y/np.max(np.abs(y))
+
+    # fade in the first 32 samples
+    y[:32] *= np.arange(32) / 32
+
+    # Convert the NumPy array `y` back to an audio segment
+    audio_segment = AudioSegment(
+        (y*(2**14)).astype(np.int16).tobytes(),
+        frame_rate=samplerate,
+        sample_width=2,
+        channels=1,
+    )
+
+    # Instead of exporting to a file, export to an in-memory buffer
+    buffer = io.BytesIO()
+    audio_segment.export(buffer, format="mp3")
+
+    # Get the MP3 data from the buffer and encode it as base64
+    mp3_data_base64 = base64.b64encode(buffer.getvalue()).decode(
+        "utf-8"
+    )
+    return (mp3_data_base64)
 
 
 class SoundPickle(sinode.Sinode):
@@ -151,24 +177,9 @@ class SoundPickle(sinode.Sinode):
                     y, samplerate = librosa.load(
                         resolved, sr=None
                     )  # sr=None to keep the original samplerate
-                    y = self.audioProcess(y, samplerate)  # Process the audio as needed
-
-                    # Convert the NumPy array `y` back to an audio segment
-                    audio_segment = AudioSegment(
-                        (y*(2**16)).astype(np.int16).tobytes(),
-                        frame_rate=samplerate,
-                        sample_width=2,
-                        channels=1,
-                    )
-
-                    # Instead of exporting to a file, export to an in-memory buffer
-                    buffer = io.BytesIO()
-                    audio_segment.export(buffer, format="mp3")
 
                     # Get the MP3 data from the buffer and encode it as base64
-                    mp3_data_base64 = base64.b64encode(buffer.getvalue()).decode(
-                        "utf-8"
-                    )
+                    mp3_data_base64 = buffer2mp3b64(y, samplerate)
 
                     sectionDict |= dict(
                         lengthSamples=len(y),
@@ -282,22 +293,10 @@ class SoundPickle(sinode.Sinode):
                 print("    " + a + ": " + str(val))
 
         # read in the data
-        y = np.frombuffer(sample.raw_sample_data, dtype=np.int16).astype(np.float32) / (
-            2**16
-        )
-        y = self.audioProcess(y, sample_rate=sample.sample_rate)
-
-        # Convert the NumPy array `y` back to an audio segment
-        audio_segment = AudioSegment(
-            y.tobytes(), frame_rate=sample.sample_rate, sample_width=4, channels=1
-        )
-
-        # Instead of exporting to a file, export to an in-memory buffer
-        buffer = io.BytesIO()
-        audio_segment.export(buffer, format="mp3")
+        y = np.frombuffer(sample.raw_sample_data, dtype=np.int16).astype(np.float32)
 
         # Get the MP3 data from the buffer and encode it as base64
-        mp3_data_base64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
+        mp3_data_base64 = buffer2mp3b64(y,sample.sample_rate)
 
         # print(sample.sample_type)
         regionDict = dict(
